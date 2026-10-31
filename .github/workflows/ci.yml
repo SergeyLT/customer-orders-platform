@@ -1,0 +1,118 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Не прерываем запущенный production-деплой новой публикацией.
+concurrency:
+  group: customer-orders-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Проверить Compose
+        run: python scripts/check_compose.py
+      - name: Проверить управление деплоем
+        run: python -m unittest discover -s tests -v
+      - uses: docker/setup-buildx-action@v3
+      - name: Собрать проверочный образ
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: customer-orders-web:check
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            RELEASE_ID=${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Проверить HTTP и версию образа
+        env:
+          EXPECTED_VERSION: ${{ github.sha }}
+          RELEASE_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: python scripts/smoke_image.py customer-orders-web:check --version "$EXPECTED_VERSION" --release "$RELEASE_ID"
+      - name: Сохранить проверенный образ
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_ENABLED == 'true'
+        env:
+          VERSION: ${{ github.sha }}
+          RELEASE_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker save customer-orders-web:check --output web-image.tar
+          python -c 'import json,os; from pathlib import Path; Path("release.json").write_text(json.dumps({"version":os.environ["VERSION"],"release":os.environ["RELEASE_ID"]}), encoding="utf-8")'
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_ENABLED == 'true'
+        with:
+          name: verified-web-image
+          path: |
+            web-image.tar
+            release.json
+          retention-days: 1
+
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_ENABLED == 'true'
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      image: ${{ steps.reference.outputs.image }}
+      version: ${{ steps.reference.outputs.version }}
+      release: ${{ steps.reference.outputs.release }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-web-image
+      - name: Проверить адрес Registry
+        env:
+          REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
+        run: |
+          python -c 'import os,re; value=os.environ["REGISTRY_HOST"]; assert re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z]{2,}", value), "REGISTRY_HOST должен быть доменом без схемы и пути"'
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Опубликовать проверенный образ и сохранить digest
+        id: reference
+        env:
+          IMAGE_TAG: ${{ vars.REGISTRY_HOST }}/customer-orders-platform/web:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECTED_VERSION: ${{ github.sha }}
+        run: |
+          docker load --input web-image.tar
+          VERSION=$(python -c 'import json,os; data=json.load(open("release.json")); assert data["version"] == os.environ["EXPECTED_VERSION"]; print(data["version"])')
+          RELEASE_ID=$(python -c 'import json; print(json.load(open("release.json"))["release"])')
+          docker tag customer-orders-web:check "$IMAGE_TAG"
+          docker push "$IMAGE_TAG"
+          IMAGE=$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')
+          printf 'image=%s\nversion=%s\nrelease=%s\n' "$IMAGE" "$VERSION" "$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          printf '### Опубликованный релиз\n\nImage: %s\n\nVersion: %s\n\nRelease: %s\n' "$IMAGE" "$VERSION" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Развернуть и подтвердить сборку
+        env:
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          WEB_IMAGE: ${{ needs.publish.outputs.image }}
+          EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
+          RELEASE_ID: ${{ needs.publish.outputs.release }}
+        run: python scripts/deploy.py --image "$WEB_IMAGE" --version "$EXPECTED_VERSION" --release "$RELEASE_ID"

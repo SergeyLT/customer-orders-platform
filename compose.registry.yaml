@@ -1,0 +1,33 @@
+name: customer-orders-registry
+
+services:
+  registry:
+    image: registry:3.1.2
+    environment:
+      REGISTRY_HTTP_ADDR: 0.0.0.0:5000
+      REGISTRY_HTTP_SECRET: ${REGISTRY_HTTP_SECRET:?Set a persistent random REGISTRY_HTTP_SECRET}
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: Docker Registry
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+      REGISTRY_STORAGE_DELETE_ENABLED: "false"
+      OTEL_TRACES_EXPORTER: none
+    expose:
+      - "5000"
+    volumes:
+      - registry_data:/var/lib/registry
+      - type: bind
+        source: ${REGISTRY_AUTH_FILE:?Set an absolute server path to htpasswd}
+        target: /auth/htpasswd
+        read_only: true
+        bind:
+          create_host_path: false
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  registry_data:
