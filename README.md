@@ -1,5 +1,7 @@
 # Customer Orders Platform
 
+[![CI/CD](https://github.com/SergeyLT/customer-orders-platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SergeyLT/customer-orders-platform/actions/workflows/ci.yml?query=branch%3Amain)
+
 Инфраструктурная основа сервиса приёма и обработки заказов клиентов. Проект включает веб-контейнер Nginx, PostgreSQL, pgAdmin, собственный Docker Registry и доставку релизов через GitHub Actions и Coolify.
 
 Backend и форма заказа находятся в планах. Стартовая страница сообщает о подготовке сервиса; `/api` и `/api/*` отвечают `503`, не принимая заказы. `/health` подтверждает работу и версию веб-контейнера, но не готовность всей системы.
