@@ -69,10 +69,12 @@ Backend и форма заказа находятся в планах. Стар�
 
    | Переменная | Значение |
    | --- | --- |
-   | `REGISTRY_AUTH_FILE` | Абсолютный путь к htpasswd на VPS |
+   | `COP_REGISTRY_AUTH_FILE` | Абсолютный путь к htpasswd на VPS |
    | `REGISTRY_HTTP_SECRET` | Постоянный случайный секрет, например результат `python -c "import secrets; print(secrets.token_hex(32))"` |
 
    Это секрет сессий загрузки, а не пароль пользователя Registry. Не меняйте его при каждом деплое.
+
+   Переменная пути названа `COP_REGISTRY_AUTH_FILE`, чтобы не конфликтовать с конфигурационным префиксом Distribution `REGISTRY_`. Coolify может передать переменные ресурса внутрь контейнера. Не создавайте в этом ресурсе старую переменную `REGISTRY_AUTH_FILE`: Registry интерпретирует её как настройку авторизации и завершится с ошибкой разбора конфигурации. Для перехода со старой версии удалите её из настроек Coolify и задайте `COP_REGISTRY_AUTH_FILE` с тем же путём.
 
 5. Назначьте домен сервису `registry`: `https://docker-registry.example.com:5000`. В этом поле Coolify `:5000` обозначает **внутренний** порт; Docker-клиенты используют `docker-registry.example.com` без порта. Отключите **Connect To Predefined Network**, не назначайте домены другим компонентам.
 6. Запустите ресурс и проверьте HTTPS. Без авторизации `/v2/` должен отвечать `401` с `WWW-Authenticate`, а после авторизации — `200`:
@@ -147,9 +149,10 @@ python scripts/check_compose.py
 python -m unittest discover -s tests -v
 docker build -t customer-orders-web:check .
 python scripts/smoke_image.py customer-orders-web:check
+python scripts/smoke_registry.py
 ```
 
-Проверки скриптов не обращаются к реальному Coolify. HTTP-проверка запускает временный контейнер с read-only filesystem и без Linux capabilities, проверяет `/health`, страницу, `503` API и `404`, затем удаляет контейнер. Registry, PostgreSQL и pgAdmin требуют отдельной проверки в целевом окружении.
+Проверки скриптов не обращаются к реальному Coolify. HTTP-проверка запускает временный контейнер с read-only filesystem и без Linux capabilities, проверяет `/health`, страницу, `503` API и `404`, затем удаляет контейнер. Проверка Registry эмулирует передачу переменной пути в контейнер, проверяет анонимный и авторизованный запросы и удаляет временный проект с его томом. Домены, HTTPS и настройки Coolify требуют отдельной проверки в целевом окружении.
 
 ## Обновление и откат
 
