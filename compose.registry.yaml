@@ -17,7 +17,8 @@ services:
     volumes:
       - registry_data:/var/lib/registry
       - type: bind
-        source: ${REGISTRY_AUTH_FILE:?Set an absolute server path to htpasswd}
+        # Для пути тома Coolify поддерживает ${VAR:-default}, но не ${VAR:?error}.
+        source: ${REGISTRY_AUTH_FILE:-/data/customer-orders-platform/registry/auth/htpasswd}
         target: /auth/htpasswd
         read_only: true
         bind:
