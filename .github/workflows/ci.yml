@@ -1,4 +1,4 @@
-name: CI/CD
+﻿name: CI/CD
 
 on:
   pull_request:
@@ -9,7 +9,6 @@ on:
 permissions:
   contents: read
 
-# Не прерываем запущенный production-деплой новой публикацией.
 concurrency:
   group: customer-orders-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -22,14 +21,34 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - name: Проверить Compose
         run: python scripts/check_compose.py
       - name: Проверить управление деплоем
         run: python -m unittest discover -s tests -v
       - name: Проверить Registry с переменными ресурса
         run: python scripts/smoke_registry.py
+      - name: Проверить frontend
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run build
       - uses: docker/setup-buildx-action@v3
-      - name: Собрать проверочный образ
+      - name: Собрать тестовый backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: test
+          load: true
+          tags: customer-orders-backend:test
+      - name: Проверить API и миграции с PostgreSQL
+        run: python scripts/test_backend.py
+      - name: Собрать web
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -38,25 +57,39 @@ jobs:
           build-args: |
             APP_VERSION=${{ github.sha }}
             RELEASE_ID=${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Проверить HTTP и версию образа
+      - name: Собрать backend
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: runtime
+          load: true
+          tags: customer-orders-backend:check
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            RELEASE_ID=${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Проверить сохранённый API-контракт
+        run: python scripts/export_openapi.py --check
+      - name: Проверить полный стек через Nginx
         env:
           EXPECTED_VERSION: ${{ github.sha }}
           RELEASE_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: python scripts/smoke_image.py customer-orders-web:check --version "$EXPECTED_VERSION" --release "$RELEASE_ID"
-      - name: Сохранить проверенный образ
+        run: python scripts/smoke_stack.py --version "$EXPECTED_VERSION" --release "$RELEASE_ID"
+      - name: Сохранить проверенные образы
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_ENABLED == 'true'
         env:
           VERSION: ${{ github.sha }}
           RELEASE_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           docker save customer-orders-web:check --output web-image.tar
+          docker save customer-orders-backend:check --output backend-image.tar
           python -c 'import json,os; from pathlib import Path; Path("release.json").write_text(json.dumps({"version":os.environ["VERSION"],"release":os.environ["RELEASE_ID"]}), encoding="utf-8")'
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PUBLISH_ENABLED == 'true'
         with:
-          name: verified-web-image
+          name: verified-images
           path: |
             web-image.tar
+            backend-image.tar
             release.json
           retention-days: 1
 
@@ -67,12 +100,13 @@ jobs:
     environment: production
     outputs:
       image: ${{ steps.reference.outputs.image }}
+      backend_image: ${{ steps.reference.outputs.backend_image }}
       version: ${{ steps.reference.outputs.version }}
       release: ${{ steps.reference.outputs.release }}
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: verified-web-image
+          name: verified-images
       - name: Проверить адрес Registry
         env:
           REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
@@ -83,23 +117,35 @@ jobs:
           registry: ${{ vars.REGISTRY_HOST }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
-      - name: Опубликовать проверенный образ и сохранить digest
+      - name: Опубликовать проверенные образы
         id: reference
         env:
-          IMAGE_TAG: ${{ vars.REGISTRY_HOST }}/customer-orders-platform/web:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
+          TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           EXPECTED_VERSION: ${{ github.sha }}
         run: |
           docker load --input web-image.tar
+          docker load --input backend-image.tar
           VERSION=$(python -c 'import json,os; data=json.load(open("release.json")); assert data["version"] == os.environ["EXPECTED_VERSION"]; print(data["version"])')
           RELEASE_ID=$(python -c 'import json; print(json.load(open("release.json"))["release"])')
-          docker tag customer-orders-web:check "$IMAGE_TAG"
-          docker push "$IMAGE_TAG"
-          IMAGE=$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')
-          printf 'image=%s\nversion=%s\nrelease=%s\n' "$IMAGE" "$VERSION" "$RELEASE_ID" >> "$GITHUB_OUTPUT"
-          printf '### Опубликованный релиз\n\nImage: %s\n\nVersion: %s\n\nRelease: %s\n' "$IMAGE" "$VERSION" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
+          for COMPONENT in web backend; do
+            TARGET="$REGISTRY_HOST/customer-orders-platform/$COMPONENT:$TAG"
+            docker tag "customer-orders-$COMPONENT:check" "$TARGET"
+            docker push "$TARGET"
+            REFERENCE=$(docker image inspect "$TARGET" --format '{{index .RepoDigests 0}}')
+            if [ "$COMPONENT" = web ]; then
+              echo "image=$REFERENCE" >> "$GITHUB_OUTPUT"
+            else
+              echo "backend_image=$REFERENCE" >> "$GITHUB_OUTPUT"
+            fi
+            printf '### %s\n\nImage: %s\n\n' "$COMPONENT" "$REFERENCE" >> "$GITHUB_STEP_SUMMARY"
+          done
+          printf 'version=%s\nrelease=%s\n' "$VERSION" "$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          printf 'Version: %s\n\nRelease: %s\n' "$VERSION" "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
-    if: vars.DEPLOY_ENABLED == 'true'
+    # Однократная защита перехода: сначала подготовьте роль БД и новые переменные Coolify.
+    if: vars.DEPLOY_ENABLED == 'true' && vars.BACKEND_DEPLOY_READY == 'true'
     needs: publish
     runs-on: ubuntu-latest
     environment: production
@@ -115,6 +161,7 @@ jobs:
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
           WEB_IMAGE: ${{ needs.publish.outputs.image }}
+          BACKEND_IMAGE: ${{ needs.publish.outputs.backend_image }}
           EXPECTED_VERSION: ${{ needs.publish.outputs.version }}
           RELEASE_ID: ${{ needs.publish.outputs.release }}
-        run: python scripts/deploy.py --image "$WEB_IMAGE" --version "$EXPECTED_VERSION" --release "$RELEASE_ID"
+        run: python scripts/deploy.py --image "$WEB_IMAGE" --backend-image "$BACKEND_IMAGE" --version "$EXPECTED_VERSION" --release "$RELEASE_ID"

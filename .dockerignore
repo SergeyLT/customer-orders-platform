@@ -4,3 +4,7 @@
 !nginx/**
 !web/
 !web/**
+web/node_modules
+web/dist
+web/tests
+web/.env*

@@ -1,4 +1,4 @@
-"""Развернуть конкретный digest через Coolify и проверить версию веб-компонента."""
+"""Развернуть согласованные digest web/backend через Coolify и проверить обе сборки."""
 
 import argparse
 import json
@@ -45,15 +45,19 @@ def request_json(url: str, *, method: str = "GET", token: str = "", body=None):
     return json.loads(raw) if raw else None
 
 
-def trigger_deployment(base: str, uuid: str, token: str, image: str) -> None:
+def trigger_deployment(base: str, uuid: str, token: str, image: str, backend_image: str) -> None:
     if not re.fullmatch(r"[A-Za-z0-9_-]+", uuid):
         raise ValueError("Некорректный UUID приложения")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9.:-]*/[a-z0-9/_.-]+@sha256:[0-9a-f]{64}", image):
-        raise ValueError("Нужен полный адрес образа с sha256 digest")
+    for reference in (image, backend_image):
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.:-]*/[a-z0-9/_.-]+@sha256:[0-9a-f]{64}", reference):
+            raise ValueError("Нужны полные адреса обоих образов с sha256 digest")
     base = https_origin(base)
     request_json(
-        f"{base}/api/v1/applications/{uuid}/envs", method="PATCH", token=token,
-        body={"key": "WEB_IMAGE", "value": image, "is_preview": False, "is_literal": True},
+        f"{base}/api/v1/applications/{uuid}/envs/bulk", method="PATCH", token=token,
+        body={"data": [
+            {"key": key, "value": value, "is_preview": False, "is_literal": True}
+            for key, value in (("WEB_IMAGE", image), ("BACKEND_IMAGE", backend_image))
+        ]},
     )
     query = urlencode({"uuid": uuid, "force": "false"})
     request_json(f"{base}/api/v1/deploy?{query}", method="POST", token=token)
@@ -65,13 +69,17 @@ def wait_for_release(base: str, version: str, release: str, *, timeout: float = 
     while True:
         try:
             query = urlencode({"release": release})
-            health = request_json(f"{base}/health?{query}")
-            if (
-                isinstance(health, dict) and health.get("status") == "ok"
-                and health.get("component") == "web" and health.get("version") == version
-                and health.get("release") == release
-            ):
-                print(f"Веб-компонент обновлён: {version}, сборка {release}.")
+            checks = [("/health", "web"), ("/api/health", "backend")]
+            ready = True
+            for path, component in checks:
+                health = request_json(f"{base}{path}?{query}")
+                ready = ready and (
+                    isinstance(health, dict) and health.get("status") == "ok"
+                    and health.get("component") == component and health.get("version") == version
+                    and health.get("release") == release
+                )
+            if ready:
+                print(f"Web и backend обновлены: {version}, сборка {release}.")
                 return
         except (OSError, ValueError, HTTPError, URLError):
             pass
@@ -84,6 +92,7 @@ def wait_for_release(base: str, version: str, release: str, *, timeout: float = 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
+    parser.add_argument("--backend-image", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--release", required=True)
     args = parser.parse_args()
@@ -96,8 +105,8 @@ def main() -> None:
         if not token:
             raise ValueError("Не задан COOLIFY_TOKEN")
         public_url = https_origin(os.environ["PUBLIC_BASE_URL"])
-        trigger_deployment(os.environ["COOLIFY_URL"], os.environ["COOLIFY_APP_UUID"], token, args.image)
-        print("Запуск деплоя принят. Ожидаем нужную сборку веб-компонента.")
+        trigger_deployment(os.environ["COOLIFY_URL"], os.environ["COOLIFY_APP_UUID"], token, args.image, args.backend_image)
+        print("Запуск деплоя принят. Ожидаем нужные сборки web и backend.")
         wait_for_release(public_url, args.version, args.release)
     except HTTPError as error:
         # Не выводим ответ API: он может содержать конфигурацию приложения.

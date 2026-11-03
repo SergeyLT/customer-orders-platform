@@ -1,17 +1,94 @@
 <!doctype html>
 <html lang="ru">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Customer Orders Platform</title>
-<style>
-  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-  body { max-width: 42rem; margin: 15vh auto; padding: 0 1.5rem; line-height: 1.65; }
-  h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.2; }
-  p { max-width: 36rem; }
-</style>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Автоматизация обработки заявок, интеграция рабочих систем и Telegram-боты для бизнеса. Расскажите о задаче и получите предварительную оценку.">
+  <meta name="theme-color" content="#fffefa">
+  <title>Автоматизация бизнеса — Customer Orders</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+<a href="#request" class="skip-link">Перейти к форме заявки</a>
+<header class="wrap topbar">
+  <a href="#" class="brand" aria-label="Customer Orders — на главную">
+    <img class="brand-mark" src="/favicon.svg" alt="" width="39" height="39">
+    <span><span class="brand-name">customer orders</span><span class="brand-sub">business automation</span></span>
+  </a>
+  <nav class="nav" aria-label="Основная навигация"><a href="#services">Направления</a><a href="#process">Как работаем</a></nav>
+  <a class="nav-cta" href="#request">Обсудить задачу ↗</a>
+</header>
 <main>
-  <h1>Customer Orders Platform</h1>
-  <p>Сервис приёма и обработки заказов клиентов готовится к запуску.</p>
-  <p>Приём заказов пока недоступен.</p>
+  <section class="wrap hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <span class="eyebrow">Автоматизация для бизнеса</span>
+      <h1 id="hero-title">Освободите команду<br>от <em>ручной работы.</em></h1>
+      <p>Свяжем заявки, рабочие системы и общение с клиентами. Расскажите, где теряется время — начнём с вашей задачи.</p>
+      <a href="#request" class="button">Подобрать решение <span class="arrow" aria-hidden="true">↗</span></a>
+      <div class="hero-note">Можно прийти с задачей, а не с готовым техническим заданием.</div>
+    </div>
+    <div class="diagram" role="img" aria-label="Пример автоматизации: заявка с сайта поступает в обработку, затем в CRM и уведомление команде">
+      <div class="orb" aria-hidden="true"></div><div class="orb second" aria-hidden="true"></div>
+      <span class="diagram-label">Из отдельных действий — в процесс</span>
+      <div class="flow-row"><div class="flow-node"><span class="node-icon" aria-hidden="true">↙</span><span>Новая заявка<span class="node-detail">Сайт · форма · мессенджер</span></span></div></div>
+      <div class="connector" aria-hidden="true"></div>
+      <div class="flow-node main"><span class="node-icon" aria-hidden="true">⌘</span><span>Обработка и распределение<span class="node-detail">По заданным правилам</span></span><span class="flow-dot" aria-hidden="true"></span></div>
+      <div class="flow-bottom"><div class="flow-node small"><span class="node-icon" aria-hidden="true">▤</span>Запись в CRM</div><div class="flow-node small"><span class="node-icon" aria-hidden="true">↗</span>Уведомление команде</div></div>
+      <span class="flow-caption">Пример сценария. Решение зависит от ваших процессов.</span>
+    </div>
+  </section>
+
+  <section class="wrap section" id="services" aria-labelledby="services-title">
+    <div class="section-heading"><div><span class="eyebrow">Что можно автоматизировать</span><h2 id="services-title">Начните с одного процесса</h2></div><p class="section-intro">Выберите направление. Диапазон бюджета — ориентир; итоговую оценку определим после обсуждения задачи.</p></div>
+    <div class="services" id="services-list" aria-live="polite"><div class="catalog-state">Загружаем услуги…</div></div>
+  </section>
+
+  <section class="wrap section" id="process" aria-labelledby="process-title">
+    <div class="section-heading"><div><span class="eyebrow">Как работаем</span><h2 id="process-title">От задачи к понятному решению</h2></div></div>
+    <div class="process">
+      <article class="process-item"><span>01</span><div><h3>Разбираем процесс</h3><p>Вы рассказываете, как всё устроено сейчас и что хотите изменить.</p></div></article>
+      <article class="process-item"><span>02</span><div><h3>Определяем объём</h3><p>Уточняем системы, ограничения и результат, который нужен команде.</p></div></article>
+      <article class="process-item"><span>03</span><div><h3>Согласуем следующий шаг</h3><p>Обсуждаем состав решения, сроки и предварительный бюджет.</p></div></article>
+    </div>
+  </section>
+
+  <section class="request-section" id="request" aria-labelledby="request-title">
+    <div class="wrap request-grid">
+      <div class="request-copy"><span class="eyebrow">Начнём с разговора</span><h2 id="request-title">Какая задача<br>стоит перед вами?</h2><p>Опишите процесс своими словами. Укажите один удобный контакт — остальные поля можно заполнить позже.</p><div class="request-aside"><strong>Пока не знаете бюджет?</strong>Оставьте «Нужна оценка». Сначала разберём задачу и предложим подходящий объём работ.</div></div>
+      <form id="order-form" class="order-form" novalidate>
+        <div id="form-fields">
+          <fieldset><legend><span class="step-number">01</span> Задача и направление</legend><div class="form-grid">
+            <label class="field full"><span>Услуга <span class="required" aria-hidden="true">*</span></span><select name="service_id" required disabled><option value="">Загрузка услуг…</option></select></label>
+            <label class="field full"><span>Что нужно автоматизировать? <span class="required" aria-hidden="true">*</span></span><textarea name="task_description" minlength="10" maxlength="4000" required placeholder="Например: заявки приходят с сайта и из Telegram. Хотим собирать их в CRM и уведомлять ответственного."></textarea></label>
+          </div></fieldset>
+          <fieldset><legend><span class="step-number">02</span> Бюджет</legend><div class="budget-box"><div class="budget-top"><label for="budget">Предварительный ориентир</label><output id="budget-value" for="budget">Нужна оценка</output></div><input id="budget" name="budget" type="range" min="0" max="100000" value="0" disabled><div class="range-labels"><span id="budget-min">Выберите услугу</span><span id="budget-max"></span></div><label class="checkbox"><input name="estimate" type="checkbox" checked>Нужна оценка — пока не знаю бюджет</label></div></fieldset>
+          <fieldset><legend><span class="step-number">03</span> Как к вам обращаться</legend><div class="form-grid">
+            <label class="field full"><span>Имя <span class="required" aria-hidden="true">*</span></span><input name="name" autocomplete="given-name" minlength="2" maxlength="100" placeholder="Ваше имя" required></label>
+            <label class="field">Email<input name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@company.ru"></label>
+            <label class="field">Телефон<input name="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="+7 (999) 123-45-67"></label>
+            <label class="field">Telegram<input name="telegram" autocomplete="off" maxlength="33" placeholder="@username"></label>
+            <label class="field">Предпочтительный способ связи<select name="preferred_contact"><option value="any">Любой из указанных</option><option value="email">Email</option><option value="phone">Телефон</option><option value="telegram">Telegram</option></select></label>
+          </div><p class="field-note">Достаточно одного контакта: email, телефона или Telegram.</p></fieldset>
+          <details class="details-fields"><summary>О компании, сроках и другие детали <span class="node-detail">Необязательно, но поможет подготовиться к разговору</span></summary><div class="form-grid">
+            <label class="field">Компания<input name="company" autocomplete="organization" maxlength="160" placeholder="Название компании"></label>
+            <label class="field">Ниша бизнеса<input name="niche" maxlength="160" placeholder="Например, онлайн-образование"></label>
+            <label class="field">Размер команды<select name="company_size"><option value="">Не указан</option><option>1–5 человек</option><option>6–20 человек</option><option>21–100 человек</option><option>Более 100 человек</option></select></label>
+            <label class="field">Ваша роль<select name="role"><option value="">Не указана</option><option>Руководитель / владелец</option><option>Сотрудник</option><option>Другое</option></select></label>
+            <label class="field">Когда нужен результат<input name="desired_deadline" maxlength="120" placeholder="Например, в течение месяца"></label>
+            <label class="field">Удобное время связи<input name="contact_time" maxlength="120" placeholder="Например, будни 10:00–18:00 МСК"></label>
+            <label class="field full">Комментарий<textarea name="comment" maxlength="2000" placeholder="Что ещё важно учесть?"></textarea></label>
+          </div></details>
+          <div class="form-footer"><button id="submit-order" class="button" type="submit" disabled>Отправить заявку <span class="arrow" aria-hidden="true">↗</span></button><span class="privacy-note">Контакты нужны для ответа на заявку. Сохраняем базовые метрики заполнения формы.</span></div>
+          <p id="form-message" class="form-message" role="alert" tabindex="-1"></p>
+        </div>
+        <div id="success-panel" class="success-panel" role="status" tabindex="-1" hidden><span class="success-icon" aria-hidden="true">✓</span><h3>Заявка отправлена!</h3><p>Мы свяжемся с вами, чтобы уточнить детали задачи.</p><p>Номер заявки:<span class="receipt-id" id="receipt-id"></span></p><button class="text-button" id="new-order" type="button">Отправить ещё одну заявку</button></div>
+        <noscript>Для загрузки услуг и отправки заявки включите JavaScript в браузере.</noscript>
+      </form>
+    </div>
+  </section>
 </main>
+<footer class="wrap footer"><span>customer orders · Автоматизация бизнеса</span><span>Обработка заявок / Интеграции / Telegram-боты</span></footer>
+</body>
 </html>

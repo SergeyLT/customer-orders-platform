@@ -1,0 +1,11 @@
+**
+!pyproject.toml
+!constraints.txt
+!alembic.ini
+!migrations/
+!migrations/**
+!src/
+!src/**
+!tests/
+!tests/**
+!logging.json

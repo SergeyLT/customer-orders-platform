@@ -1,0 +1,60 @@
+name: customer-orders-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: customer_orders
+      POSTGRES_USER: orders_admin
+      POSTGRES_PASSWORD: local-database-password-only
+      APP_DB_PASSWORD: local-application-password-only
+    volumes:
+      - local_postgres:/var/lib/postgresql/data
+      - ./docker/postgres-init.sh:/docker-entrypoint-initdb.d/10-app-user.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U orders_admin -d customer_orders"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    image: customer-orders-backend:local
+    environment:
+      DB_HOST: postgres
+      POSTGRES_DB: customer_orders
+      APP_DB_USER: orders_app
+      APP_DB_PASSWORD: local-application-password-only
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: local-admin-password-for-development
+    networks: [default, database]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  web:
+    build: .
+    image: customer-orders-web:local
+    ports: ["127.0.0.1:${LOCAL_WEB_PORT:-8090}:8080"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+networks:
+  default: {}
+  database:
+    internal: true
+
+volumes:
+  local_postgres:

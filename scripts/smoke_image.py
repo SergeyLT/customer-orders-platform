@@ -46,7 +46,7 @@ def check(image: str, version: str, release: str) -> None:
             raise RuntimeError("Метаданные запущенного образа не соответствуют сборке")
         if get(base + "/")[0] != 200:
             raise RuntimeError("Стартовая страница недоступна")
-        for path in ("/api", "/api/orders"):
+        for path in ("/api/health", "/api/services"):
             status, body = get(base + path)
             if status != 503 or json.loads(body).get("error") != "backend_not_available":
                 raise RuntimeError("API без backend должен явно отвечать 503")

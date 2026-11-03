@@ -17,3 +17,8 @@ AGENTS.md
 *.log
 web-image.tar
 release.json
+backend-image.tar
+node_modules/
+web/dist/
+*.egg-info/
+.ruff_cache/

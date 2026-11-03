@@ -20,8 +20,12 @@ def check() -> None:
     app = load_config("compose.coolify.yaml")
     registry = load_config("compose.registry.yaml")
     services = app["services"]
-    if services["web"].get("ports") or services["postgres"].get("ports"):
-        raise ValueError("Web и PostgreSQL не должны публиковать host-порты")
+    if any(services[name].get("ports") for name in ("web", "backend", "postgres")):
+        raise ValueError("Web, backend и PostgreSQL не должны публиковать host-порты")
+    if set(services["backend"]["networks"]) != {"default", "database"}:
+        raise ValueError("Backend должен соединять только сеть приложения и сеть базы")
+    if services["backend"]["environment"].get("APP_DB_USER") != "orders_app":
+        raise ValueError("Backend должен работать от ограниченной роли orders_app")
     ports = services["pgadmin"].get("ports", [])
     if len(ports) != 1 or ports[0].get("host_ip") != "127.0.0.1":
         raise ValueError("pgAdmin должен быть опубликован только на localhost")

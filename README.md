@@ -2,16 +2,17 @@
 
 [![CI/CD](https://github.com/SergeyLT/customer-orders-platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SergeyLT/customer-orders-platform/actions/workflows/ci.yml?query=branch%3Amain)
 
-Инфраструктурная основа сервиса приёма и обработки заказов клиентов. Проект включает веб-контейнер Nginx, PostgreSQL, pgAdmin, собственный Docker Registry и доставку релизов через GitHub Actions и Coolify.
+Сервис приёма заявок на автоматизацию бизнеса: обработка обращений, интеграция рабочих систем и клиентские Telegram-боты. Клиент выбирает услугу, описывает задачу и оставляет контакт; FastAPI сохраняет заявку и базовые метрики в PostgreSQL. Доставка релизов выполняется через GitHub Actions, собственный Docker Registry и Coolify.
 
-Backend и форма заказа находятся в планах. Стартовая страница сообщает о подготовке сервиса; `/api` и `/api/*` отвечают `503`, не принимая заказы. `/health` подтверждает работу и версию веб-контейнера, но не готовность всей системы.
+Frontend собирается через `npm run build` и обслуживается Nginx. Публичный API доступен через `/api`; управление услугами, чтение заявок и Swagger защищены HTTP Basic. `/health` проверяет web, `/api/health` — backend и подключение к БД. Полный контракт: [docs/API.md](docs/API.md) и [docs/openapi.json](docs/openapi.json).
 
 ## Состав
 
 | Компонент | Назначение | Доступ |
 | --- | --- | --- |
-| Nginx | Веб-страница и точка будущего API | `https://orders.example.com` через Traefik |
-| PostgreSQL 17 | Хранилище будущих заказов | Внутренняя сеть проекта |
+| Nginx | Frontend и проксирование API | `https://orders.example.com` через Traefik |
+| FastAPI | Валидация, услуги, заявки и метрики | Только через Nginx |
+| PostgreSQL 17 | Хранилище услуг и заявок | Внутренняя сеть проекта |
 | pgAdmin | Администрирование PostgreSQL | Loopback VPS и SSH-туннель |
 | Distribution Registry | Хранение Docker-образов | `https://docker-registry.example.com` через Traefik, с авторизацией |
 | GitHub Actions | Проверки, сборка и публикация релиза | GitHub |
@@ -28,14 +29,19 @@ Backend и форма заказа находятся в планах. Стар�
 - DNS-записи `orders` и `docker-registry`, направленные на сервер; при использовании AAAA IPv6 также должен работать.
 - Внешние TCP `80/443` для прокси и выпуска сертификатов, SSH-доступ администратора.
 - GitHub-репозиторий с Actions и runner `ubuntu-latest` для Linux amd64. Другую архитектуру следует явно настроить и проверить.
-- Python 3.12+ для скриптов. Сторонние Python-пакеты не требуются.
+- Python 3.12+ для инфраструктурных скриптов: они используют стандартную библиотеку. Зависимости backend устанавливаются внутри его Docker-образа.
+- Node.js 24+ для локальной сборки frontend; на VPS он не требуется.
 
 Не публикуйте порты PostgreSQL и Registry на всех интерфейсах. pgAdmin по умолчанию привязан к `127.0.0.1:5050`. Наличие UFW само по себе не гарантирует фильтрацию опубликованных Docker-портов: см. [Docker и межсетевые экраны](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
 
 ## Файлы проекта
 
 - `compose.registry.yaml` — отдельный инфраструктурный ресурс Registry.
-- `compose.coolify.yaml` — приложение: web, PostgreSQL, pgAdmin.
+- `compose.coolify.yaml` — приложение: web, backend, PostgreSQL, pgAdmin.
+- `compose.local.yaml` — отдельный локальный стек с тестовыми доступами.
+- `backend/` — FastAPI, модели, миграции Alembic и тесты с PostgreSQL.
+- `backend/constraints.txt` — точные версии проверенных Python-зависимостей; намерения по зависимостям заданы в `backend/pyproject.toml`.
+- `docs/DEPLOYMENT.md` — подготовка БД и переход с инфраструктурного релиза на приложение.
 - `Dockerfile`, `nginx/`, `web/` — образ веб-компонента.
 - `.github/workflows/ci.yml` — CI/CD.
 - `scripts/create_registry_user.py` — создание и ротация bcrypt-паролей Registry.
@@ -97,6 +103,7 @@ Backend и форма заказа находятся в планах. Стар�
 | --- | --- |
 | `PUBLISH_ENABLED` | `true`, когда Registry готов |
 | `DEPLOY_ENABLED` | `false`, пока приложение в Coolify не настроено |
+| `BACKEND_DEPLOY_READY` | `false` до подготовки роли БД и первого запуска backend |
 
 В environment `production` добавьте:
 
@@ -115,20 +122,13 @@ Backend и форма заказа находятся в планах. Стар�
 
 Для первой публикации достаточно настроить Registry и его доступы; параметры Coolify нужны на следующем этапе. Флагов нет — работают только проверки. Environment production и правила его доступа ограничьте доверенной веткой `main`.
 
-После push в `main` или ручного запуска workflow на `main` Actions проверит конфигурацию и скрипты, соберёт образ, запустит его HTTP-проверки и опубликует **тот же проверенный образ** через временный artifact. Повторной сборки в publish-job нет. Тег содержит SHA, run ID и номер попытки. В Summary задания появятся полный digest, SHA и идентификатор сборки — сохраните их для первого запуска и отката.
+После push в `main` или ручного запуска workflow на `main` Actions проверит конфигурацию и скрипты, соберёт web и backend, проверит API с PostgreSQL и полный стек через Nginx, затем опубликует **те же проверенные образы** через временный artifact. Повторной сборки в publish-job нет. Тег содержит SHA, run ID и номер попытки. В Summary задания появятся digest обоих образов, SHA и идентификатор сборки — сохраните их для первого запуска и отката.
 
 ### Приложение в Coolify
 
-1. Создайте второе приложение из того же Git-репозитория: Docker Compose, файл `compose.coolify.yaml`.
-2. Отключите автоматический деплой при push из Git: запуск релиза выполняет Actions после проверок.
-3. В настройках реестров сервера Coolify выполните вход в `docker-registry.example.com` как `server-deployer`. При настройке через SSH вход выполняется от пользователя, настроенного для этого сервера в Coolify, не обязательно от пользователя вашей интерактивной SSH-сессии. Проверьте доступ к домену Registry с самого VPS.
-4. Задайте `WEB_IMAGE` полным адресом с digest из Summary. Нулевой digest в `.env.example` — не существующий образ. Настройте runtime-переменные `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_HOST_PORT` по примеру. Используйте разные случайные пароли; значения передаются через Coolify, а не файлом `.env` из Git.
-5. Назначьте **только** сервису `web` домен `https://orders.example.com:8080`. Внешний адрес останется `https://orders.example.com`. Не назначайте домены PostgreSQL и pgAdmin; отключите **Connect To Predefined Network**. Перед запуском проверьте сгенерированный Coolify Compose: PostgreSQL должен оставаться только в сети database, pgAdmin — на loopback.
-6. Выполните первый Deploy, проверьте страницу и `/health`. В ответе будут `status`, `component`, `version`, `release`.
-7. Добавьте UUID этого приложения в GitHub и токен Coolify с правами на **изменение переменных** и **деплой**. Одного deploy-only разрешения недостаточно. Установка Coolify должна поддерживать `PATCH /api/v1/applications/{uuid}/envs` и `POST /api/v1/deploy`.
-8. Поставьте repository variable `DEPLOY_ENABLED=true`. Следующий workflow обновит `WEB_IMAGE` digest-адресом, вызовет деплой и дождётся ожидаемой сборки.
+Запуск и переход с уже работающей инфраструктуры описаны в [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Сначала подготовьте ограниченную роль PostgreSQL, задайте новые секреты и оба digest, затем запустите приложение. Старые тома PostgreSQL и pgAdmin сохраняются; удалять их не требуется.
 
-Скрипт не следует HTTP-редиректам API и не выводит сырые ответы с конфигурацией. `COOLIFY_URL` должен сразу содержать окончательный HTTPS-origin. Ошибка или таймаут не запускают автоматический откат; проверьте приложение в Coolify.
+Первый push с новой реализацией не должен менять рабочий ресурс: `BACKEND_DEPLOY_READY` по умолчанию отсутствует и автоматический deploy-job будет пропущен. Публикация обоих образов при `PUBLISH_ENABLED=true` продолжает работать.
 
 ### Доступ к pgAdmin
 
@@ -140,7 +140,7 @@ ssh -N -L 5050:127.0.0.1:5050 user@server
 
 Откройте `http://127.0.0.1:5050`, войдите с учётными данными pgAdmin и создайте подключение: host `postgres`, port `5432`, имя базы и пользователь из настроек приложения. Пароль PostgreSQL вводите в pgAdmin, не в Compose репозитория. Если 5050 занят на VPS, измените `PGADMIN_HOST_PORT` и правую часть туннеля; если занят локально — левую.
 
-Инициализационный пользователь PostgreSQL имеет административные права. Для будущего backend создадим отдельного пользователя с ограниченными правами и миграциями. Переменные `POSTGRES_*` и `PGADMIN_DEFAULT_*` задают начальные учётные данные: смена значения в Coolify не заменяет пароль в уже созданной базе или профиле pgAdmin.
+Инициализационный пользователь PostgreSQL имеет административные права. Backend использует отдельную роль `orders_app`, владеющую только схемой `orders`; миграции применяются этой ролью при старте под транзакционной advisory-блокировкой. В pgAdmin откройте схему `orders`, чтобы увидеть `services`, `applications`, `behavior_metrics`. Переменные `POSTGRES_*` и `PGADMIN_DEFAULT_*` задают начальные учётные данные: смена значения в Coolify не заменяет пароль в уже созданной базе или профиле pgAdmin.
 
 ## Локальные проверки
 
@@ -150,17 +150,22 @@ ssh -N -L 5050:127.0.0.1:5050 user@server
 python scripts/check_compose.py
 python -m unittest discover -s tests -v
 docker build -t customer-orders-web:check .
-python scripts/smoke_image.py customer-orders-web:check
+docker build --target runtime -t customer-orders-backend:check backend
+docker build --target test -t customer-orders-backend:test backend
+python scripts/test_backend.py
+python scripts/smoke_stack.py
 python scripts/smoke_registry.py
 ```
 
-Проверки скриптов не обращаются к реальному Coolify. HTTP-проверка запускает временный контейнер с read-only filesystem и без Linux capabilities, проверяет `/health`, страницу, `503` API и `404`, затем удаляет контейнер. Проверка Registry эмулирует передачу переменной пути в контейнер, проверяет анонимный и авторизованный запросы и удаляет временный проект с его томом. Домены, HTTPS и настройки Coolify требуют отдельной проверки в целевом окружении.
+Проверки скриптов не обращаются к реальному Coolify. Backend-тесты используют отдельную базу `customer_orders_test` и ограниченную роль. Проверка полного стека создаёт временный Compose-проект, загружает три услуги, отправляет заявку через Nginx, проверяет повторную отправку, метрики и отказ/возврат PostgreSQL, затем удаляет только свои контейнеры и тома. Параметр `--keep` оставляет этот тестовый стек для браузерной проверки. Домены, HTTPS и настройки Coolify проверяются в целевом окружении.
+
+Для разработки: `docker compose -f compose.local.yaml up -d --build`, затем откройте `http://127.0.0.1:8090`. Swagger: `/api/admin/docs`, логин `admin`, пароль `local-admin-password-for-development`. Это отдельные локальные доступы, их нельзя переносить в production. Каталог первоначально пуст: создайте три услуги по [docs/API.md](docs/API.md).
 
 ## Обновление и откат
 
 Обычный релиз: push в `main` → проверки → сборка и HTTP-проверка → публикация → установка digest → деплой → подтверждение SHA и сборки. Workflow сериализует production-запуски и не прерывает уже запущенный деплой.
 
-Для отката остановите новые автоматические релизы (`DEPLOY_ENABLED=false`), выберите сохранённый digest предыдущего релиза, задайте его в `WEB_IMAGE` в Coolify и выполните Redeploy. Проверьте `/health` и доступность страницы. После устранения проблемы снова включите деплой. Возврат образа не откатывает данные или миграции будущего backend.
+Для отката остановите новые автоматические релизы (`DEPLOY_ENABLED=false`), выберите сохранённый digest предыдущего релиза, задайте согласованные адреса в `WEB_IMAGE` и `BACKEND_IMAGE` в Coolify и выполните Redeploy. Проверьте `/health`, `/api/health` и доступность страницы. После устранения проблемы снова включите деплой. Возврат образа не откатывает данные или миграции PostgreSQL.
 
 Версии сторонних сервисов изменяются отдельно через Compose с проверкой совместимости и резервной копией. PostgreSQL закреплён на major 17 и получает patch-обновления тега `17-alpine`; для побитовой фиксации сторонних образов закрепите также digest. Переход на другой major PostgreSQL требует миграции данных.
 
@@ -201,10 +206,10 @@ GHCR — альтернативное хранилище образов, сов�
 | Потеря VPS | Нужен backup или повторная сборка | Образы остаются в GHCR |
 | Контроль хранилища | Полный контроль, собственная политика | Зависимость от GitHub и его условий |
 
-Для перехода на GHCR нужно изменить домен и namespace образа (обычно `ghcr.io/<owner>/<repository>/web`), разрешить workflow `packages: write`, заменить авторизацию публикации на `github.actor`/`GITHUB_TOKEN`, настроить сервер Coolify на чтение пакета и передавать новый адрес с digest в `WEB_IMAGE`. Проверка `REGISTRY_HOST` уже принимает `ghcr.io`, но фиксированный путь `customer-orders-platform/web` в workflow надо заменить на namespace владельца. Собственный ресурс Registry после переноса необходимых релизов можно вывести из эксплуатации. Одновременная публикация в оба хранилища сейчас не реализована.
+Для перехода на GHCR нужно изменить домен и namespace образа (обычно `ghcr.io/<owner>/<repository>/web`), разрешить workflow `packages: write`, заменить авторизацию публикации на `github.actor`/`GITHUB_TOKEN`, настроить сервер Coolify на чтение пакета и передавать новые адреса с digest в `WEB_IMAGE` и `BACKEND_IMAGE`. Проверка `REGISTRY_HOST` уже принимает `ghcr.io`, но фиксированный путь `customer-orders-platform/$COMPONENT` в workflow надо заменить на namespace владельца для обоих компонентов. Собственный ресурс Registry после переноса необходимых релизов можно вывести из эксплуатации. Одновременная публикация в оба хранилища сейчас не реализована.
 
 Преимущества GHCR: меньше сервисов на VPS, меньше задач обслуживания, интеграция прав с GitHub и сохранение образов при потере сервера. Собственный Registry выбран для независимого размещения и контроля образов. Подробнее: [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 ## Развитие
 
-Backend TBD: API заказов, схема и миграции PostgreSQL, ограниченная роль БД, прикладная валидация, защита от злоупотреблений, форма заказа, readiness и интеграционные проверки. До реализации этих компонентов платформа не принимает реальные заказы.
+Полноценная административная панель, уведомления, интеграции с внешними системами и расширенная обработка заказов относятся к следующим этапам. Сейчас реализованы форма, каталог услуг, административный API, хранение заявок и базовых метрик.

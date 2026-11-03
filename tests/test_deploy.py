@@ -13,24 +13,25 @@ class DeploymentTests(unittest.TestCase):
     def test_update_digest_before_deployment(self):
         image = "docker-registry.example.com/customer-orders-platform/web@sha256:" + "a" * 64
         with patch.object(deploy, "request_json", return_value={}) as request:
-            deploy.trigger_deployment("https://coolify.example.com", "app123", "test-token", image)
+            deploy.trigger_deployment("https://coolify.example.com", "app123", "test-token", image, image)
         calls = request.call_args_list
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0].kwargs["method"], "PATCH")
-        self.assertEqual(calls[0].kwargs["body"]["value"], image)
+        self.assertEqual(calls[0].kwargs["body"]["data"][0]["value"], image)
+        self.assertEqual(calls[0].kwargs["body"]["data"][1]["key"], "BACKEND_IMAGE")
         self.assertEqual(calls[1].kwargs["method"], "POST")
         self.assertIn("/deploy?uuid=app123&force=false", calls[1].args[0])
 
     def test_update_failure_does_not_trigger_deploy(self):
         with patch.object(deploy, "request_json", side_effect=OSError("API unavailable")) as request:
             with self.assertRaises(OSError):
-                deploy.trigger_deployment("https://coolify.example.com", "app123", "test-token", "registry.example.com/web@sha256:" + "a" * 64)
+                deploy.trigger_deployment("https://coolify.example.com", "app123", "test-token", "registry.example.com/web@sha256:" + "a" * 64, "registry.example.com/backend@sha256:" + "a" * 64)
         self.assertEqual(request.call_count, 1)
 
     def test_mutable_tag_rejected_before_api_call(self):
         with patch.object(deploy, "request_json") as request:
             with self.assertRaises(ValueError):
-                deploy.trigger_deployment("https://coolify.example.com", "app123", "test-token", "registry.example.com/web:latest")
+                deploy.trigger_deployment("https://coolify.example.com", "app123", "test-token", "registry.example.com/web:latest", "registry.example.com/backend:latest")
         request.assert_not_called()
 
     def test_old_build_with_same_commit_is_not_success(self):
@@ -41,8 +42,17 @@ class DeploymentTests(unittest.TestCase):
 
     def test_expected_release_is_success(self):
         health = {"status": "ok", "component": "web", "version": "a" * 40, "release": "new-build"}
-        with patch.object(deploy, "request_json", return_value=health):
+        def answer(url):
+            return {**health, "component": "backend" if "/api/health" in url else "web"}
+        with patch.object(deploy, "request_json", side_effect=answer):
             deploy.wait_for_release("https://orders.example.com", "a" * 40, "new-build", timeout=0)
+
+    def test_stale_backend_is_not_success_even_when_web_matches(self):
+        def answer(url):
+            return {"status": "ok", "component": "backend" if "/api/health" in url else "web", "version": "a" * 40, "release": "old" if "/api/health" in url else "new"}
+        with patch.object(deploy, "request_json", side_effect=answer):
+            with self.assertRaises(TimeoutError):
+                deploy.wait_for_release("https://orders.example.com", "a" * 40, "new", timeout=0)
 
     def test_origin_rejects_http_credentials_and_paths(self):
         for value in ("http://coolify.example.com", "https://user:password@example.com", "https://example.com/api", "https://example.com?token=x"):
