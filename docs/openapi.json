@@ -970,12 +970,12 @@
             "required": false,
             "schema": {
               "enum": [
-                1,
-                7,
-                30
+                "1",
+                "7",
+                "30"
               ],
-              "type": "integer",
-              "default": 7,
+              "type": "string",
+              "default": "7",
               "title": "Days"
             }
           },

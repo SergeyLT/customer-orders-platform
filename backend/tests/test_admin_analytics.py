@@ -164,6 +164,21 @@ def test_analytics_retention_preserves_aggregates(client,engine):
         assert len(list(s.scalars(select(AnalyticsDaily))))==1
 
 
+@pytest.mark.parametrize('days', ['1', '7', '30'])
+@pytest.mark.parametrize('device', ['desktop', 'mobile'])
+@pytest.mark.parametrize('kind', ['cursor', 'click'])
+def test_analytics_query_periods(client, admin, days, device, kind):
+    response = client.get('/api/admin/analytics', headers=admin, params={'days': days, 'device': device, 'kind': kind})
+    assert response.status_code == 200, response.text
+    assert [period['days'] for period in response.json()['periods']] == [1, 7, 30]
+
+
+@pytest.mark.parametrize('days', ['0', '2', '31', 'week', '7.0'])
+def test_analytics_rejects_unknown_period(client, admin, days):
+    response = client.get('/api/admin/analytics', headers=admin, params={'days': days})
+    assert response.status_code == 422
+
+
 def test_priority_examples_manual_override_and_search(client,admin,service,engine):
     with Session(engine) as s,s.begin():create_demo(s)
     with Session(engine) as s,s.begin():create_demo(s)

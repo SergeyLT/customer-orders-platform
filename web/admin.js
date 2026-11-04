@@ -61,7 +61,7 @@ function field(form, name, title, value = '', options = {}) {
   const input = options.choices ? document.createElement('select') : document.createElement(options.textarea ? 'textarea' : 'input');
   input.name = name;
   if (options.choices) for (const [val, text] of options.choices) input.add(new Option(text, val));
-  else input.type = options.type || 'text';
+  else if (!options.textarea) input.type = options.type || 'text';
   for (const key of ['required', 'min', 'max', 'minLength', 'maxLength', 'pattern', 'autocomplete']) if (options[key] !== undefined) input[key] = options[key];
   input.value = value ?? '';
   label.append(input); form.append(label); return input;

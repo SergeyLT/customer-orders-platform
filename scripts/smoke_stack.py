@@ -104,7 +104,8 @@ def check(version: str, release: str, *, keep: bool = False) -> None:
         assert applications[0]["metrics"]["elapsed_ms"] == 15000
         assert http("/api/admin/orders", admin=True)[0] == 200
         assert http("/api/admin/dashboard", admin=True)[0] == 200
-        assert http("/api/admin/analytics", admin=True)[0] == 200
+        for days in (1, 7, 30):
+            assert http(f"/api/admin/analytics?days={days}&device=desktop&kind=cursor", admin=True)[0] == 200
         status, body = http("/api/analytics/visits", "POST", {"consent": True, "device": "desktop"})
         assert status == 201, body
         visit = json.loads(body)

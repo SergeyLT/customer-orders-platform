@@ -124,14 +124,14 @@ reports = APIRouter(prefix="/api/admin", tags=["Аналитика"])
 
 
 @reports.get("/analytics")
-def report(session: SessionDep, admin: AdminDep, days: Literal[1, 7, 30] = 7, device: Literal["desktop", "mobile"] = "desktop", kind: Literal["cursor", "click"] = "cursor"):
+def report(session: SessionDep, admin: AdminDep, days: Literal["1", "7", "30"] = "7", device: Literal["desktop", "mobile"] = "desktop", kind: Literal["cursor", "click"] = "cursor"):
     periods = []
     today = now().date()
     for count in (1, 7, 30):
         rows = list(session.scalars(select(AnalyticsDaily).where(AnalyticsDaily.day >= today - timedelta(days=count - 1), AnalyticsDaily.device == device)))
         visits = sum(row.visits for row in rows)
         periods.append({"days": count, "visits": visits, "average_active_seconds": round(sum(row.active_ms for row in rows) / max(visits, 1) / 1000, 1), **{name: sum(getattr(row, name) for row in rows) for name in ("selected", "attempted", "submitted")}})
-    since = now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)
+    since = now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=int(days) - 1)
     # Группируем в сетку 40×60, не отдаём огромный массив сырых движений.
     x = func.floor(BehaviorEvent.x / 250)
     y = func.floor(BehaviorEvent.y / (10000 / 60))
