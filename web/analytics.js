@@ -3,7 +3,7 @@ const POLICY = 'orders-analytics-v1';
 let consent = false, visit = null, pending = null, queue = [], activeMs = 0;
 let lastActivity = performance.now(), lastTick = performance.now(), cursor = null, flushing = false, generation = 0;
 const banner = document.createElement('aside'); banner.className = 'analytics-consent'; banner.setAttribute('aria-label', 'Настройка аналитики');
-const text = document.createElement('p'); text.textContent = 'Помогите улучшить сайт: разрешите собирать активное время, клики и координаты курсора. Содержимое формы в эту аналитику не передаётся. Сырые события — 30 дней, суточные показатели — 12 месяцев. Отказ не мешает отправить заявку.';
+const text = document.createElement('p'); text.textContent = 'Разрешите собирать обезличенную статистику посещений, чтобы улучшать сайт. Имя, контакты и содержимое формы в статистику не передаются.';
 function choice(label, action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'text-button'; b.textContent = label; b.addEventListener('click', action); return b; }
 const controls = document.createElement('div'); controls.append(choice('Разрешить', () => setConsent(true)), choice('Отказаться', () => setConsent(false))); banner.append(text, controls); document.body.append(banner);
 const settings = choice('Настройки аналитики', () => { banner.hidden = false; }); settings.classList.add('analytics-settings'); document.querySelector('footer').append(settings);
