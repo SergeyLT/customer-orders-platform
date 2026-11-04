@@ -17,15 +17,30 @@ async function api(path, method = 'GET', body) {
   let data=null;
   if(response.status!==204) { try { data=await response.json(); } catch { throw new Error('Сервис временно недоступен. Повторите действие позже.'); } }
   if (!response.ok) {
-    if (response.status === 401 && !path.startsWith('/auth/login')) signedOut();
+    if (response.status === 401 && !path.startsWith('/auth/login') && path !== '/auth/me') signedOut();
     const detail = data?.detail;
     throw new Error(Array.isArray(detail) ? detail.map(x => `${x.field}: ${x.message}`).join('; ') : typeof detail === 'string' ? detail : 'Сервис временно недоступен');
   }
   return data;
 }
-function signedOut() { csrf = ''; user = null; $('#workspace').hidden = true; $('#login').hidden = false; $('#identity').replaceChildren(); $('#modal').close(); }
+async function refreshSetupAvailability() {
+  $('#have-invite').hidden = true;
+  let available = false;
+  try { available = (await api('/auth/setup/status')).setup_available === true && !user; } catch { /* При недоступной проверке регистрация скрыта. */ }
+  $('#have-invite').hidden = !available;
+  if (!available) {
+    inviteCode = '';
+    $('#invite-form').hidden = true;
+    $('#setup-form').hidden = true;
+    $('#invite-form').reset();
+    $('#setup-form').reset();
+  }
+  return available;
+}
+function signedOut() { csrf = ''; user = null; $('#workspace').hidden = true; $('#login').hidden = false; $('#identity').replaceChildren(); $('#modal').close(); refreshSetupAvailability(); }
 async function signedIn(data) {
   user = data.admin; csrf = data.csrf_token; inviteCode = '';
+  $('#have-invite').hidden = true;
   $('#login').hidden = true; $('#workspace').hidden = false;
   for (const form of document.querySelectorAll('#login form')) form.reset();
   $('#setup-form').hidden = true; $('#invite-form').hidden = true;
@@ -34,7 +49,8 @@ async function signedIn(data) {
 }
 function formHandler(form, action) { form.addEventListener('submit', async event => { event.preventDefault(); const submit = form.querySelector('button[type=submit], button:not([type])'); if (submit) submit.disabled = true; try { await action(new FormData(form)); } catch (e) { showError(e); } finally { if (submit) submit.disabled = false; } }); }
 formHandler($('#login-form'), async data => signedIn(await api('/auth/login', 'POST', Object.fromEntries(data))));
-$('#have-invite').addEventListener('click', () => { $('#invite-form').hidden = !$('#invite-form').hidden; $('#setup-form').hidden = true; inviteCode = ''; });
+$('#have-invite').addEventListener('click', async () => { if (!await refreshSetupAvailability()) return; $('#invite-form').hidden = !$('#invite-form').hidden; $('#setup-form').hidden = true; inviteCode = ''; });
+window.addEventListener('focus', () => { if (!user) refreshSetupAvailability(); });
 formHandler($('#invite-form'), async data => { const code = data.get('code'); await api('/auth/setup/check', 'POST', { code }); inviteCode = code; $('#invite-form').reset(); $('#invite-form').hidden = true; $('#setup-form').hidden = false; message('Приглашение подтверждено. Создайте первый аккаунт.'); });
 formHandler($('#setup-form'), async data => { if (data.get('password') !== data.get('confirm')) throw new Error('Пароли не совпадают'); await signedIn(await api('/auth/setup', 'POST', { username: data.get('username'), password: data.get('password'), code: inviteCode })); });
 $('#close-modal').addEventListener('click', () => $('#modal').close());

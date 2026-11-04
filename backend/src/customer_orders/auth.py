@@ -103,6 +103,10 @@ class InviteCode(BaseModel):
     code: SecretStr = Field(min_length=32, max_length=100)
 
 
+class SetupStatus(BaseModel):
+    setup_available: bool
+
+
 class Setup(Credentials, InviteCode):
     pass
 
@@ -141,6 +145,11 @@ def issue_session(session, admin, response):
 
 
 router = APIRouter(prefix="/api/auth", tags=["Авторизация"])
+
+
+@router.get("/setup/status", response_model=SetupStatus)
+def setup_status(session: SessionDep):
+    return SetupStatus(setup_available=session.scalar(select(Admin.id).limit(1)) is None)
 
 
 @router.post("/setup/check", dependencies=[Depends(json_guard)])

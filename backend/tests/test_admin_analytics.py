@@ -27,6 +27,7 @@ def test_setup_requires_code_one_use_and_preserves_data(client, engine, service)
 
 
 def test_setup_reissue_concurrent_and_password_hash(client, engine):
+    assert client.get('/api/auth/setup/status').json() == {'setup_available': True}
     old = invite(engine)
     code = invite(engine)
     assert client.post('/api/auth/setup/check',headers=GUARD,json={"code":old}).status_code == 403
@@ -40,6 +41,12 @@ def test_setup_reissue_concurrent_and_password_hash(client, engine):
         assert record.password_hash.startswith('$argon2id$') and PASSWORD not in record.password_hash
         assert session.get(SetupInvite,1) is None
     assert client.post('/api/auth/setup/check',headers=GUARD,json={"code":code}).status_code==403
+    assert client.get('/api/auth/setup/status').json() == {'setup_available': False}
+    client.cookies.clear()
+    assert client.get('/api/auth/setup/status').json() == {'setup_available': False}
+    with Session(engine) as session, session.begin():
+        session.scalar(select(Admin)).is_active = False
+    assert client.get('/api/auth/setup/status').json() == {'setup_available': False}
 
 
 def test_expired_invite(client,engine):

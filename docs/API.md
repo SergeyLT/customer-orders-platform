@@ -21,6 +21,7 @@
 | GET `/api/admin/dashboard` | JWT cookie | Число заявок, распределение по статусам и услугам |
 | GET/POST `/api/admin/admins`, PATCH `/{uuid}` | JWT cookie + CSRF для записи | Управление аккаунтами без выдачи хешей |
 | POST `/api/auth/setup/check`, `/api/auth/setup` | Одноразовый код | Проверка приглашения / первый аккаунт |
+| GET `/api/auth/setup/status` | Публичный | Только setup_available: возможность первичной настройки без данных аккаунтов |
 | POST `/api/auth/login` | Логин/пароль | Установить HttpOnly cookie и вернуть CSRF |
 | GET `/api/auth/me` | JWT cookie | Текущий аккаунт и CSRF-токен |
 | POST `/api/auth/logout`, `/api/auth/password` | JWT cookie + CSRF | Выход / смена своего пароля с отзывом сеансов |
