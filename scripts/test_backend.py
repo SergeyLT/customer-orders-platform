@@ -34,7 +34,8 @@ def check(image: str) -> None:
         provision(name, "customer_orders_test", "orders_admin", password)
         run("run", "--rm", "--network", network,
             "-e", "DB_HOST=postgres", "-e", "POSTGRES_DB=customer_orders_test",
-            "-e", "APP_DB_PASSWORD=" + password, "-e", "ADMIN_PASSWORD=" + password,
+            "-e", "APP_DB_PASSWORD=" + password, "-e", "JWT_SECRET=" + secrets.token_urlsafe(32),
+            "-e", "COOKIE_SECURE=false", "-e", "PUBLIC_ORIGIN=http://testserver",
             image)
     finally:
         subprocess.run(["docker", "rm", "-f", "-v", name], capture_output=True)

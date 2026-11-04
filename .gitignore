@@ -4,6 +4,7 @@
 .secrets/
 .tmp/
 ignore/
+docs/MANUAL-CHECKS.md
 output/
 backups/
 __pycache__/

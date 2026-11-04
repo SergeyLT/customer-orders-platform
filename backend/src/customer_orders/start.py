@@ -32,6 +32,13 @@ def migrate() -> None:
             config = Config("alembic.ini")
             config.attributes["connection"] = connection
             command.upgrade(config, "head")
+        from sqlalchemy.orm import Session
+        from sqlalchemy import select
+        from .models import Application, Service
+        from .priority import assign
+        with Session(engine) as session, session.begin():
+            for record in session.scalars(select(Application).where(Application.priority_evaluation.is_(None))):
+                assign(record, session.get(Service, record.service_id))
     finally:
         engine.dispose()
 
@@ -46,6 +53,6 @@ if __name__ == "__main__":
     # HTTP-процесс получает только необходимые ему настройки.
     allowed = {"PATH", "HOME", "LANG", "LC_ALL", "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED",
                "DB_HOST", "DB_PORT", "POSTGRES_DB", "APP_DB_USER", "APP_DB_PASSWORD",
-               "ADMIN_USERNAME", "ADMIN_PASSWORD", "APP_VERSION", "RELEASE_ID"}
+               "JWT_SECRET", "PUBLIC_ORIGIN", "COOKIE_SECURE", "APP_VERSION", "RELEASE_ID"}
     environment = {key: value for key, value in os.environ.items() if key in allowed}
     os.execve(sys.executable, [sys.executable, "-m", "uvicorn", "customer_orders.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--no-proxy-headers", "--log-config", "logging.json"], environment)

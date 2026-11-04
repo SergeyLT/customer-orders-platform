@@ -28,8 +28,9 @@ services:
       POSTGRES_DB: customer_orders
       APP_DB_USER: orders_app
       APP_DB_PASSWORD: local-application-password-only
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: local-admin-password-for-development
+      JWT_SECRET: local-jwt-secret-for-development-only-32
+      PUBLIC_ORIGIN: http://127.0.0.1:8090
+      COOKIE_SECURE: "false"
     networks: [default, database]
     depends_on:
       postgres:

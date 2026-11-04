@@ -4,7 +4,7 @@
 
 ## Перед первым push
 
-Repository variable `BACKEND_DEPLOY_READY` оставьте отсутствующей или `false`. Новая версия workflow будет проверять и публиковать оба образа, но не запустит неподготовленный backend автоматически. Существующий сайт и PostgreSQL продолжат работать до явного Redeploy. Для защиты от старых workflow, запущенных до изменения файла, дополнительно поставьте `DEPLOY_ENABLED=false` и дождитесь окончания уже начатых деплоев.
+Repository variables `BACKEND_DEPLOY_READY` и `ADMIN_DEPLOY_READY` оставьте отсутствующими или `false` до соответствующих первых запусков. Для уже работающего backend оставьте его флаг true, а ADMIN_DEPLOY_READY — false. Workflow проверяет и публикует оба образа, но не запускает неподготовленную административную версию автоматически. Существующий сайт и PostgreSQL продолжат работать до явного Redeploy. Для защиты от старых workflow дополнительно поставьте `DEPLOY_ENABLED=false` и дождитесь окончания уже начатых деплоев.
 
 ## Подготовка существующей базы
 
@@ -37,8 +37,8 @@ python3 scripts/create_app_database_user.py --container <postgres-container-name
 | `POSTGRES_DB` | Существующая база, обычно customer_orders |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | Существующие административные параметры PostgreSQL, не менять при переходе |
 | `APP_DB_PASSWORD` | Пароль созданной роли orders_app |
-| `ADMIN_USERNAME` | Администратор API, по умолчанию admin |
-| `ADMIN_PASSWORD` | Новый отдельный пароль от 24 символов для Swagger и административного API |
+| `JWT_SECRET` | Отдельный случайный секрет подписи от 32 символов, постоянный между релизами |
+| `PUBLIC_ORIGIN` | Публичный HTTPS origin, например https://orders.example.com, без внутреннего порта |
 | `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, `PGADMIN_HOST_PORT` | Существующие настройки pgAdmin |
 
 Оба digest должны относиться к одинаковым Version и Release. Не используйте нулевые значения из `.env.example` и не переключайтесь на latest.
@@ -57,7 +57,7 @@ Coolify может передавать общие runtime-переменные 
 2. Подготовьте роль БД и новые переменные, обновите Compose и домен.
 3. Выполните ручной Deploy приложения.
 4. Проверьте `/health` и `/api/health`: оба должны вернуть одинаковые version и release; component — web и backend соответственно.
-5. Откройте `https://orders.example.com/api/admin/docs`. Вход выполняется учётными данными ADMIN_USERNAME/ADMIN_PASSWORD. Ресурсы Swagger загружаются с этого же сайта, внешние CDN не используются. В Swagger при необходимости нажмите Authorize и укажите те же HTTP Basic credentials.
+5. Выпустите приглашение командой `docker exec -it <backend-container> python -m customer_orders.manage invite`. Откройте `https://orders.example.com/admin`, предъявите код и создайте первый аккаунт. Затем откройте `/api/admin/docs` в том же браузере. Ресурсы Swagger локальные, HTTP Basic больше не используется. Подробности в [ADMIN.md](ADMIN.md).
 6. Создайте три услуги из [API.md](API.md), убедитесь, что GET `/api/services` возвращает весь список.
 7. Отправьте заявку через форму и проверьте её в административном API или pgAdmin: база customer_orders → schema orders → tables applications и behavior_metrics. Метрики связаны с заявкой по application_id.
 
@@ -65,7 +65,7 @@ Coolify может передавать общие runtime-переменные 
 
 ## Автоматические релизы
 
-После первого успешного запуска задайте repository variables `PUBLISH_ENABLED=true`, `DEPLOY_ENABLED=true`, `BACKEND_DEPLOY_READY=true`.
+После первого успешного запуска задайте repository variables `PUBLISH_ENABLED=true`, `DEPLOY_ENABLED=true`, `BACKEND_DEPLOY_READY=true`, `ADMIN_DEPLOY_READY=true`.
 
 GitHub Environment production содержит `REGISTRY_HOST`, `COOLIFY_URL`, `COOLIFY_APP_UUID`, `PUBLIC_BASE_URL`; Secrets — `REGISTRY_USERNAME`, `REGISTRY_PASSWORD`, `COOLIFY_TOKEN`. UUID должен указывать на приложение, а не Registry. Токен требует write и deploy.
 

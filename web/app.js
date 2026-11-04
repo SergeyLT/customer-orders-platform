@@ -128,6 +128,7 @@ form.addEventListener('submit', async (event) => {
     try { data = await response.json(); } catch { throw new Error('Сервис временно недоступен. Повторите отправку позже.'); }
     if (!response.ok) throw new Error(errorMessage(data));
     if (typeof data.id !== 'string') throw new Error('Не удалось получить подтверждение. Повторите отправку.');
+    document.dispatchEvent(new Event('orders:submitted'));
     document.querySelector('#form-fields').hidden = true;
     document.querySelector('#receipt-id').textContent = data.id;
     const success = document.querySelector('#success-panel');

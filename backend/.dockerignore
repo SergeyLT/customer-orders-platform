@@ -9,3 +9,5 @@
 !tests/
 !tests/**
 !logging.json
+**/__pycache__
+**/*.pyc

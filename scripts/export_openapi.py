@@ -16,7 +16,7 @@ def main() -> None:
     raw = subprocess.check_output([
         "docker", "run", "--rm", "--network", "none",
         "-e", "APP_DB_PASSWORD=contract-placeholder-password",
-        "-e", "ADMIN_PASSWORD=contract-placeholder-admin-password",
+        "-e", "JWT_SECRET=contract-placeholder-jwt-secret-at-least-32",
         "--entrypoint", "python", args.image, "-c",
         "import json; from customer_orders.main import app; print(json.dumps(app.openapi()))",
     ], text=True)

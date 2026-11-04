@@ -1,7 +1,7 @@
 """Проверить web → Nginx → backend → PostgreSQL на изолированном локальном стеке."""
 
 import argparse
-import base64
+from http.cookiejar import CookieJar
 import json
 import os
 from pathlib import Path
@@ -10,7 +10,7 @@ import secrets
 import subprocess
 import time
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, build_opener, HTTPCookieProcessor
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,19 +44,22 @@ def check(version: str, release: str, *, keep: bool = False) -> None:
     try:
         compose("up", "-d", "--wait", "--wait-timeout", "120", "--no-build", "--pull", "never")
         base = "http://" + compose("port", "web", "8080").splitlines()[0]
-        basic = "Basic " + base64.b64encode(b"admin:local-admin-password-for-development").decode()
+        admin_http = build_opener(HTTPCookieProcessor(CookieJar()))
+        csrf = ""
 
         def http(path, method="GET", payload=None, *, admin=False, key=None):
             headers = {"Accept": "application/json"}
             if admin:
-                headers["Authorization"] = basic
+                headers["X-Requested-With"] = "CustomerOrders"
+                if csrf:
+                    headers["X-CSRF-Token"] = csrf
             if key:
                 headers["Idempotency-Key"] = key
             if payload is not None:
                 headers["Content-Type"] = "application/json"
             request = Request(base + path, method=method, headers=headers, data=json.dumps(payload).encode() if payload is not None else None)
             try:
-                with urlopen(request, timeout=10) as response:
+                with (admin_http.open(request, timeout=10) if admin else urlopen(request, timeout=10)) as response:
                     return response.status, response.read()
             except HTTPError as error:
                 return error.code, error.read()
@@ -70,7 +73,18 @@ def check(version: str, release: str, *, keep: bool = False) -> None:
         for asset in re.findall(r'(?:src|href)="(/assets/[^\"]+)"', page.decode()):
             assert http(asset)[0] == 200, asset
         assert http("/api/admin/docs")[0] == 401
+        # Первичная настройка настоящей командой контейнера; код не печатается.
+        backend_id = compose("ps", "-q", "backend")
+        result = subprocess.check_output(["docker", "exec", backend_id, "python", "-c", "from sqlalchemy.orm import Session; from customer_orders.core import make_engine,get_settings; from customer_orders.manage import create_invite; s=Session(make_engine(get_settings())); code=create_invite(s); s.commit(); print(code)"], text=True).strip()
+        status, body = http("/api/auth/setup", "POST", {"code": result, "username": "admin", "password": "local-admin-password-for-development"}, admin=True)
+        assert status == 201, body
+        csrf = json.loads(body)["csrf_token"]
+        status, admin_page = http("/admin")
+        assert status == 200
+        for asset in re.findall(r'(?:src|href)="(/assets/[^\"]+)"', admin_page.decode()):
+            assert http(asset)[0] == 200, asset
         assert http("/api/admin/docs", admin=True)[0] == 200
+        assert http("/assets/swagger-auth.js")[0] == 200
         assert http("/assets/swagger/swagger-ui-bundle.js")[0] == 200
         for service in DEMO_SERVICES:
             assert http("/api/admin/services", "POST", service, admin=True)[0] == 201
@@ -88,6 +102,13 @@ def check(version: str, release: str, *, keep: bool = False) -> None:
         assert status == 200 and len(applications) == 1
         assert applications[0]["id"] == receipt["id"]
         assert applications[0]["metrics"]["elapsed_ms"] == 15000
+        assert http("/api/admin/orders", admin=True)[0] == 200
+        assert http("/api/admin/dashboard", admin=True)[0] == 200
+        assert http("/api/admin/analytics", admin=True)[0] == 200
+        status, body = http("/api/analytics/visits", "POST", {"consent": True, "device": "desktop"})
+        assert status == 201, body
+        visit = json.loads(body)
+        assert http("/api/analytics/batches", "POST", {**visit, "batch_id": str(uuid4()), "active_ms": 0, "events": []})[0] == 202
         # Потеря БД не должна оставлять readiness зелёным.
         compose("stop", "postgres")
         assert http("/api/health")[0] == 503

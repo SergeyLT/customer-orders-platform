@@ -55,9 +55,12 @@ def create_application(session: Session, data: ApplicationWrite, key: UUID) -> t
         if data.budget is not None and not service.budget_min <= data.budget <= service.budget_max:
             raise HTTPException(422, "Бюджет находится за пределами диапазона выбранной услуги")
         application_id = uuid4()
+        from .priority import evaluate
+        evaluation = evaluate(values, service.budget_min, service.budget_max)
         statement = insert(Application).values(
             **values, id=application_id, idempotency_key=key, payload_hash=payload_hash,
             service_title=service.title, status="new",
+            priority_score=evaluation["score"], priority_evaluation=evaluation,
         ).on_conflict_do_nothing(index_elements=[Application.idempotency_key]).returning(Application.id)
         created_id = session.scalar(statement)
         if created_id is None:

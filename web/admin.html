@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Управление · customer orders</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="./admin.css"><script type="module" src="./admin.js"></script></head>
+<body><header><a href="/" class="brand">customer orders <small>РАБОЧЕЕ МЕСТО</small></a><div id="identity"></div></header>
+<main><p id="notice" role="status" tabindex="-1"></p>
+<section id="login" class="auth-card"><span class="eyebrow">УПРАВЛЕНИЕ ПЛАТФОРМОЙ</span><h1>Добро пожаловать</h1><p>Войдите, чтобы работать с заявками, услугами и статистикой.</p>
+<form id="login-form"><label>Логин<input name="username" autocomplete="username" required maxlength="80"></label><label>Пароль<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label><button>Войти</button></form>
+<button class="secondary" id="have-invite" type="button">Есть приглашение</button>
+<form id="invite-form" hidden><label>Одноразовый код<input name="code" type="password" autocomplete="off" required minlength="32" maxlength="100"></label><button>Проверить приглашение</button></form>
+<form id="setup-form" hidden><h2>Создать администратора</h2><label>Логин<input name="username" pattern="[a-zA-Z0-9_.\-]{3,80}" minlength="3" maxlength="80" autocomplete="username" required></label><label>Пароль · от 16 символов<input name="password" type="password" minlength="16" maxlength="128" autocomplete="new-password" required></label><label>Повторите пароль<input name="confirm" type="password" minlength="16" maxlength="128" autocomplete="new-password" required></label><button>Создать администратора</button></form></section>
+<section id="workspace" hidden><div class="page-heading"><div><span class="eyebrow">ОБЗОР И УПРАВЛЕНИЕ</span><h1>Платформа под контролем</h1></div><a href="/api/admin/docs" target="_blank" rel="noopener">API / Swagger ↗</a></div>
+<div id="summary" class="stats"></div><details class="chart"><summary>Распределение заявок по услугам и статусам</summary><div id="breakdown" class="grid"></div></details><nav aria-label="Разделы"><button data-tab="orders">Заявки</button><button data-tab="services">Услуги</button><button data-tab="analytics">Статистика пользователей</button><button data-tab="admins">Администраторы</button><button data-tab="password">Мой пароль</button></nav>
+<section id="content" aria-live="polite"></section></section></main>
+<dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button id="close-modal" class="secondary" aria-label="Закрыть">Закрыть ×</button></div><div id="modal-body"></div></dialog>
+<footer>customer orders · Доступ только для администраторов</footer></body></html>

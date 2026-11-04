@@ -1,6 +1,8 @@
 """HTTP API заказов с защищённой документацией и административными маршрутами."""
 
 from contextlib import asynccontextmanager
+import asyncio
+from contextlib import suppress
 from time import monotonic
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -15,7 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload, sessionmaker
 
 from . import crud
-from .core import SessionDep, get_settings, make_engine, require_admin
+from .core import SessionDep, get_settings, make_engine
+from .auth import current_admin
 from .models import Application, Service
 from .schemas import ApplicationRead, ApplicationReceipt, ApplicationStatus, ApplicationWrite, ServiceRead, ServiceWrite
 
@@ -29,11 +32,28 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         engine = make_engine(settings)
         app.state.sessions = sessionmaker(engine, expire_on_commit=False)
-        yield
-        engine.dispose()
+        async def maintenance():
+            from .analytics import cleanup
+            def clean():
+                with app.state.sessions.begin() as session:
+                    cleanup(session)
+            while True:
+                try:
+                    await asyncio.to_thread(clean)
+                except Exception:
+                    logger.error("maintenance_failed")
+                await asyncio.sleep(3600)
+        task = asyncio.create_task(maintenance())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            engine.dispose()
 
     app = FastAPI(
-        title="Customer Orders API", version="0.2.0", docs_url=None, redoc_url=None,
+        title="Customer Orders API", version="0.3.0", docs_url=None, redoc_url=None,
         openapi_url=None, redirect_slashes=False, lifespan=lifespan,
     )
 
@@ -97,7 +117,7 @@ def create_app() -> FastAPI:
         response.status_code = 201 if created else 200
         return ApplicationReceipt(id=application_id)
 
-    admin = APIRouter(prefix="/api/admin", tags=["Администрирование"], dependencies=[Depends(require_admin)])
+    admin = APIRouter(prefix="/api/admin", tags=["Администрирование"], dependencies=[Depends(current_admin)])
 
     @admin.get("/services", response_model=list[ServiceRead])
     def all_services(session: SessionDep):
@@ -151,12 +171,15 @@ def create_app() -> FastAPI:
 
     @admin.get("/docs", include_in_schema=False)
     def swagger():
-        return get_swagger_ui_html(
+        result = get_swagger_ui_html(
             openapi_url="/api/admin/openapi.json", title="Customer Orders API",
             swagger_js_url="/assets/swagger/swagger-ui-bundle.js",
             swagger_css_url="/assets/swagger/swagger-ui.css", swagger_favicon_url="/favicon.svg",
             swagger_ui_parameters={"persistAuthorization": False, "displayRequestDuration": True, "validatorUrl": None},
         )
+        result.body = result.body.replace(b'</head>', b'<script src="/assets/swagger-auth.js"></script></head>')
+        result.headers['content-length'] = str(len(result.body))
+        return result
 
     @admin.get("/openapi.json", include_in_schema=False)
     def openapi():
@@ -164,6 +187,14 @@ def create_app() -> FastAPI:
 
     app.include_router(public)
     app.include_router(admin)
+    from .auth import router as auth_router, admins
+    from .analytics import router as analytics_router, reports
+    from .admin_api import router as workspace
+    app.include_router(auth_router)
+    app.include_router(admins)
+    app.include_router(analytics_router)
+    app.include_router(reports)
+    app.include_router(workspace)
     return app
 
 

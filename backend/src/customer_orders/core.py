@@ -2,12 +2,11 @@
 
 from collections.abc import Iterator
 from functools import lru_cache
-import secrets
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import Field, SecretStr
+from fastapi import Depends, Request
+from pydantic import Field, SecretStr, model_validator
+from urllib.parse import urlsplit
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL, create_engine
 from sqlalchemy.engine import Engine
@@ -22,10 +21,20 @@ class Settings(BaseSettings):
     postgres_db: str = "customer_orders"
     app_db_user: str = "orders_app"
     app_db_password: SecretStr
-    admin_username: str = "admin"
-    admin_password: SecretStr = Field(min_length=24)
+    jwt_secret: SecretStr = Field(min_length=32)
+    public_origin: str = "https://orders.example.com"
+    cookie_secure: bool = True
     app_version: str = "dev"
     release_id: str = "local"
+
+    @model_validator(mode="after")
+    def origin_is_valid(self):
+        origin = urlsplit(self.public_origin)
+        if not origin.hostname or origin.username or origin.password or origin.query or origin.fragment or origin.path not in ("", "/") or origin.scheme not in ("http", "https"):
+            raise ValueError("PUBLIC_ORIGIN должен содержать только схему, хост и при необходимости порт")
+        if self.cookie_secure and origin.scheme != "https":
+            raise ValueError("Для production требуется HTTPS origin")
+        return self
 
     @property
     def database_url(self) -> URL:
@@ -55,13 +64,3 @@ def get_session(request: Request) -> Iterator[Session]:
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
-security = HTTPBasic(realm="Customer Orders Administration")
-
-
-def require_admin(credentials: Annotated[HTTPBasicCredentials, Depends(security)]) -> str:
-    settings = get_settings()
-    username_ok = secrets.compare_digest(credentials.username.encode(), settings.admin_username.encode())
-    password_ok = secrets.compare_digest(credentials.password.encode(), settings.admin_password.get_secret_value().encode())
-    if not (username_ok and password_ok):
-        raise HTTPException(401, "Требуется авторизация администратора", headers={"WWW-Authenticate": 'Basic realm="Customer Orders Administration"'})
-    return credentials.username

@@ -23,7 +23,7 @@ def engine():
 @pytest.fixture(autouse=True)
 def clean_database(engine):
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE applications, services RESTART IDENTITY CASCADE"))
+        connection.execute(text("TRUNCATE applications, services, admins, setup_invites, auth_limits, visits, analytics_daily RESTART IDENTITY CASCADE"))
 
 
 @pytest.fixture
@@ -33,14 +33,20 @@ def client(engine):
 
 
 @pytest.fixture
-def admin():
-    settings = get_settings()
-    return settings.admin_username, settings.admin_password.get_secret_value()
+def admin(engine, client):
+    from customer_orders.auth import passwords
+    from customer_orders.models import Admin
+    from sqlalchemy.orm import Session
+    with Session(engine) as session, session.begin():
+        session.add(Admin(username="admin", password_hash=passwords.hash("test-admin-password-only-123")))
+    response = client.post("/api/auth/login", json={"username": "admin", "password": "test-admin-password-only-123"}, headers={"X-Requested-With": "CustomerOrders"})
+    assert response.status_code == 200, response.text
+    return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
 @pytest.fixture
 def service(client, admin):
-    result = client.post("/api/admin/services", auth=admin, json={
+    result = client.post("/api/admin/services", headers=admin, json={
         "slug": "lead-processing", "title": "Обработка заявок",
         "description": "Сбор обращений, распределение и уведомления ответственных.",
         "budget_min": 30000, "budget_max": 120000,

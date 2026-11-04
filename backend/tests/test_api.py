@@ -9,13 +9,13 @@ from customer_orders.models import BehaviorMetrics
 
 def test_catalog_lists_all_three_services(client, admin, service):
     for slug, title in [("integration", "Интеграция систем"), ("telegram", "Клиентский Telegram-бот")]:
-        result = client.post("/api/admin/services", auth=admin, json={
+        result = client.post("/api/admin/services", headers=admin, json={
             "slug": slug, "title": title, "description": "Настройка взаимодействия рабочих систем.",
             "budget_min": 40000, "budget_max": 200000,
         })
         assert result.status_code == 201
     assert len(client.get("/api/services").json()) == 3
-    changed = client.put(f"/api/admin/services/{service['id']}", auth=admin, json={
+    changed = client.put(f"/api/admin/services/{service['id']}", headers=admin, json={
         **{key: value for key, value in service.items() if key != "id"}, "title": "Заявки из разных каналов",
     })
     assert changed.status_code == 200
@@ -29,11 +29,11 @@ def test_admin_data_and_documentation_require_authentication(client, path):
 
 
 def test_protected_openapi_and_self_hosted_swagger(client, admin):
-    docs = client.get("/api/admin/docs", auth=admin)
+    docs = client.get("/api/admin/docs", headers=admin)
     assert docs.status_code == 200
     assert "/assets/swagger/swagger-ui-bundle.js" in docs.text
     assert "cdn.jsdelivr.net" not in docs.text
-    contract = client.get("/api/admin/openapi.json", auth=admin).json()
+    contract = client.get("/api/admin/openapi.json", headers=admin).json()
     assert "/api/applications" in contract["paths"]
     assert contract["paths"]["/api/admin/services"]["post"]["security"]
     assert client.get("/docs").status_code == 404
@@ -45,7 +45,7 @@ def test_application_and_metrics_are_saved_without_public_pii(client, admin, pay
     receipt = response.json()
     assert set(receipt) == {"id", "message"}
     assert "anna@example.com" not in response.text
-    detail = client.get(f"/api/admin/applications/{receipt['id']}", auth=admin).json()
+    detail = client.get(f"/api/admin/applications/{receipt['id']}", headers=admin).json()
     assert detail["email"] == payload["email"]
     assert detail["service_title"] == "Обработка заявок"
     assert detail["metrics"] == payload["metrics"]
@@ -115,18 +115,18 @@ def test_failure_saving_metrics_rolls_back_application(client, payload, engine, 
 
 def test_service_deactivation_preserves_old_applications(client, admin, service, payload):
     receipt = client.post("/api/applications", json=payload).json()
-    assert client.delete(f"/api/admin/services/{service['id']}", auth=admin).status_code == 204
+    assert client.delete(f"/api/admin/services/{service['id']}", headers=admin).status_code == 204
     assert client.get("/api/services").json() == []
     assert client.post("/api/applications", json=payload).status_code == 404
-    assert client.get(f"/api/admin/applications/{receipt['id']}", auth=admin).status_code == 200
+    assert client.get(f"/api/admin/applications/{receipt['id']}", headers=admin).status_code == 200
 
 
 def test_status_update_and_deletion_cascade(client, admin, payload, engine):
     receipt = client.post("/api/applications", json=payload).json()
     path = f"/api/admin/applications/{receipt['id']}"
-    assert client.patch(path, auth=admin, json={"status": "in_progress"}).json()["status"] == "in_progress"
-    assert client.delete(path, auth=admin).status_code == 204
-    assert client.get(path, auth=admin).status_code == 404
+    assert client.patch(path, headers=admin, json={"status": "in_progress"}).json()["status"] == "in_progress"
+    assert client.delete(path, headers=admin).status_code == 204
+    assert client.get(path, headers=admin).status_code == 404
     with engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM behavior_metrics")).scalar() == 0
 

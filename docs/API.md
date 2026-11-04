@@ -9,12 +9,26 @@
 | GET `/api/health` | Публичный | Состояние соединения с БД, версия и сборка backend |
 | GET `/api/services` | Публичный | Все активные услуги с диапазонами бюджета |
 | POST `/api/applications` | Публичный | Создание заявки и метрик одной транзакцией |
-| GET `/api/admin/docs` | HTTP Basic | Swagger с ресурсами на собственном сервере |
-| GET `/api/admin/openapi.json` | HTTP Basic | Машиночитаемый OpenAPI-контракт |
-| GET/POST `/api/admin/services` | HTTP Basic | Полный каталог / создание услуги |
-| GET/PUT/DELETE `/api/admin/services/{id}` | HTTP Basic | Чтение / полная замена / деактивация услуги |
-| GET `/api/admin/applications` | HTTP Basic | Заявки с метриками; limit 1–100, offset ≥ 0 |
-| GET/PATCH/DELETE `/api/admin/applications/{uuid}` | HTTP Basic | Чтение / смена статуса / удаление вместе с метриками |
+| GET `/api/admin/docs` | JWT cookie | Swagger с ресурсами на собственном сервере |
+| GET `/api/admin/openapi.json` | JWT cookie | Машиночитаемый OpenAPI-контракт |
+| GET/POST `/api/admin/services` | JWT cookie | Полный каталог / создание услуги |
+| GET/PUT/DELETE `/api/admin/services/{id}` | JWT cookie | Чтение / полная замена / деактивация услуги |
+| GET `/api/admin/applications` | JWT cookie | Заявки с метриками; limit 1–100, offset ≥ 0 |
+| GET/PATCH/DELETE `/api/admin/applications/{uuid}` | JWT cookie | Чтение / смена статуса / удаление вместе с метриками |
+| GET `/api/admin/orders` | JWT cookie | Объект items/total/offset/limit; q, status, service_id, priority, sort |
+| GET `/api/admin/orders/{uuid}` | JWT cookie | Карточка с автоматической и ручной оценкой |
+| PATCH `/api/admin/applications/{uuid}/priority` | JWT cookie + CSRF | priority: high/medium/low/null, comment обязателен при ручной оценке |
+| GET `/api/admin/dashboard` | JWT cookie | Число заявок, распределение по статусам и услугам |
+| GET/POST `/api/admin/admins`, PATCH `/{uuid}` | JWT cookie + CSRF для записи | Управление аккаунтами без выдачи хешей |
+| POST `/api/auth/setup/check`, `/api/auth/setup` | Одноразовый код | Проверка приглашения / первый аккаунт |
+| POST `/api/auth/login` | Логин/пароль | Установить HttpOnly cookie и вернуть CSRF |
+| GET `/api/auth/me` | JWT cookie | Текущий аккаунт и CSRF-токен |
+| POST `/api/auth/logout`, `/api/auth/password` | JWT cookie + CSRF | Выход / смена своего пароля с отзывом сеансов |
+| POST `/api/analytics/visits` | consent=true | Посещение и секрет записи |
+| POST `/api/analytics/batches` | Секрет посещения | Пакет событий с дедупликацией по UUID |
+| GET `/api/admin/analytics` | JWT cookie | Периоды 1/7/30 дней, device, kind и тепловая карта |
+
+Все изменяющие административные запросы требуют X-CSRF-Token, не только строки таблицы с явной пометкой CSRF. Вход и первичная настройка требуют Content-Type: application/json и X-Requested-With: CustomerOrders. Подробности: [ADMIN.md](ADMIN.md), [PRIORITIZATION.md](PRIORITIZATION.md), [ANALYTICS.md](ANALYTICS.md). Старый HTTP Basic отключён. Swagger использует сеанс после входа на /admin.
 
 Публичное создание возвращает только UUID и подтверждение, без контактов. `201` означает новую запись; `200` — повтор уже принятой заявки. Полные данные доступны только администратору. Деактивация услуги сохраняет историю уже созданных заявок.
 
